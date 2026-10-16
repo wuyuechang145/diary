@@ -1,0 +1,37 @@
+{
+  "name": "my-project3",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --host 127.0.0.1 --port 5173",
+    "build": "nuxt build",
+    "start": "node --env-file-if-exists=.env scripts/start-production.mjs",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "db:migrate": "node scripts/migrate-fs-to-mysql.mjs",
+    "db:migrate:schema": "node scripts/migrate-database.mjs",
+    "db:indexes": "node scripts/add-scale-indexes.mjs",
+    "test:smoke": "node scripts/smoke-mysql-api.mjs",
+    "test:load-read": "node scripts/load-read-api.mjs",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.24.4",
+    "nuxt": "^4.5.2",
+    "redis": "^5.12.1",
+    "three": "^0.185.1",
+    "vue": "^3.5.40",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/three": "^0.185.4",
+    "typescript": "~6.0.0",
+    "vue-tsc": "^3.3.7"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  }
+}

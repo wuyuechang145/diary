@@ -1,0 +1,2 @@
+# Deprecated compatibility file. Local builds are now configured directly in compose.yaml.
+services: {}

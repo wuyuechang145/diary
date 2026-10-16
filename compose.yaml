@@ -1,0 +1,157 @@
+name: xingjian
+
+x-app-image: &app-image
+  image: xingjian:local
+  pull_policy: build
+  build:
+    context: .
+    target: runtime
+
+x-database-environment: &database-environment
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: xingjian
+  MYSQL_USER: xingjian
+  MYSQL_PASSWORD_FILE: /run/xingjian-secrets/mysql_password
+
+services:
+  secrets:
+    <<: *app-image
+    restart: "no"
+    init: true
+    user: "0:0"
+    command: ["node", "scripts/init-docker-secrets.mjs"]
+    healthcheck:
+      disable: true
+    environment:
+      XINGJIAN_SECRETS_DIR: /run/xingjian-secrets
+    volumes:
+      - secrets-data:/run/xingjian-secrets
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: xingjian
+      MYSQL_USER: xingjian
+      MYSQL_PASSWORD_FILE: /run/xingjian-secrets/mysql_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/xingjian-secrets/mysql_root_password
+      TZ: UTC
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - secrets-data:/run/xingjian-secrets:ro
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$(cat /run/xingjian-secrets/mysql_root_password)\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - backend
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$(cat /run/xingjian-secrets/redis_password)\""]
+    volumes:
+      - redis-data:/data
+      - secrets-data:/run/xingjian-secrets:ro
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$(cat /run/xingjian-secrets/redis_password)\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - backend
+
+  migrate:
+    <<: *app-image
+    restart: "no"
+    init: true
+    command: ["node", "scripts/migrate-database.mjs"]
+    healthcheck:
+      disable: true
+    environment:
+      <<: *database-environment
+      NODE_ENV: production
+    volumes:
+      - secrets-data:/run/xingjian-secrets:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
+
+  app:
+    <<: *app-image
+    restart: unless-stopped
+    init: true
+    environment:
+      <<: *database-environment
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      MYSQL_POOL_SIZE: ${MYSQL_POOL_SIZE:-10}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD_FILE: /run/xingjian-secrets/redis_password
+      NUXT_SESSION_SECRET_FILE: /run/xingjian-secrets/session_secret
+      PUBLIC_ORIGIN: ${DOCKER_PUBLIC_ORIGIN:-http://localhost:3000}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    volumes:
+      - secrets-data:/run/xingjian-secrets:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - frontend
+      - backend
+
+volumes:
+  mysql-data:
+  redis-data:
+  secrets-data:
+
+networks:
+  frontend:
+  backend:
+    internal: true
