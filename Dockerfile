@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -7,7 +7,7 @@ COPY . .
 # npm ci runs prepare before nuxt.config.ts exists. Regenerate srcDir aliases now.
 RUN npx nuxt prepare && npm run build
 
-FROM node:22-alpine AS runtime
+FROM node:25-alpine AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production
